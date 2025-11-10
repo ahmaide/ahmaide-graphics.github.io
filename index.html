@@ -21,6 +21,11 @@
   <p>Use mouse to drag and rotate the scene. Use arrow keys and w, s keys to move the camera.</p>
   <p>Please Move The Shoulder Joint (Level 2) To See The Changes In The Base Joint (Level 1) Rotation.</p>
 
+  <!-- Hidden video element used as animated texture source -->
+  <video id="videoTexture" src="images/mourinho.mp4"
+         muted loop autoplay playsinline
+         style="display:none"></video>
+
   <div style="display:flex;gap:10px;align-items:flex-start;">
     <div style="display:flex;flex-direction:column;gap:10px;">
       <div>
@@ -50,56 +55,56 @@
           <label for="joint3-slider">Y-Rotation:</label>
           <input type="range" id="joint3-slider" data-joint-id="joint3" min="-90" max="90" value="0">
         </div>
-        </div>
+      </div>
     </div>
   </div>
 
   <script id="vertex-shader" type="x-shader/x-vertex">#version 300 es
 in vec3 aPosition;
 in vec3 aColor;
-in vec3 aNormal; // Reintroduced normal for future lighting
-in vec2 aTexCoord; // New texture coordinate attribute
+in vec3 aNormal;
+in vec2 aTexCoord;
 
 uniform mat4 uModelViewMatrix;
 uniform mat4 uProjectionMatrix;
 uniform mat4 uModelTransformationMatrix;
-uniform mat4 uNormalMatrix; // Reintroduced normal matrix
+uniform mat4 uNormalMatrix;
 
 out vec3 vColor;
-out vec2 vTexCoord; // Texture coordinate output
+out vec2 vTexCoord;
 
 void main() {
   vec4 worldPosition = uModelTransformationMatrix * vec4(aPosition, 1.0);
   gl_Position = uProjectionMatrix * uModelViewMatrix * worldPosition;
-  vColor = aColor; 
-  vTexCoord = aTexCoord; 
+  vColor = aColor;
+  vTexCoord = aTexCoord;
 }
 </script>
 
   <script id="fragment-shader" type="x-shader/x-fragment">#version 300 es
 precision mediump float;
 in vec3 vColor;
-in vec2 vTexCoord; // Texture coordinate input
+in vec2 vTexCoord;
 
 uniform int uObjectIndex;
-uniform sampler2D uSampler; // Texture sampler uniform
+uniform sampler2D uSampler;
 
 out vec4 fragColor;
 
 void main() {
   if (uObjectIndex == 0 || uObjectIndex == 2 || uObjectIndex == 4) {
-      // Base, Lower Arm, Upper Arm (Cylinders) get texture
-      fragColor = texture(uSampler, vTexCoord);
+    // Base, Lower Arm, Upper Arm get texture
+    fragColor = texture(uSampler, vTexCoord);
   } else {
-      // Joints/Fingers (Spheres/Cones) get flat color for now
-      vec3 objectColor;
-      if (uObjectIndex == 1)      objectColor = vec3(1.0, 0.5, 0.0); // Orange (Shoulder Joint)
-      else if (uObjectIndex == 3) objectColor = vec3(0.0, 1.0, 0.0); // Green (Wrist Joint)
-      else if (uObjectIndex == 5) objectColor = vec3(0.5, 0.0, 0.5); // Purple (Finger 1)
-      else if (uObjectIndex == 6) objectColor = vec3(0.0, 1.0, 1.0); // Cyan (Finger 2)
-      else                        objectColor = vec3(1.0, 1.0, 1.0); // Fallback
-      
-      fragColor = vec4(objectColor, 1.0);
+    // Joints/Fingers get flat color
+    vec3 objectColor;
+    if (uObjectIndex == 1)      objectColor = vec3(1.0, 0.5, 0.0); // Orange (Shoulder Joint)
+    else if (uObjectIndex == 3) objectColor = vec3(0.0, 1.0, 0.0); // Green (Wrist Joint)
+    else if (uObjectIndex == 5) objectColor = vec3(0.5, 0.0, 0.5); // Purple (Finger 1)
+    else if (uObjectIndex == 6) objectColor = vec3(0.0, 1.0, 1.0); // Cyan (Finger 2)
+    else                        objectColor = vec3(1.0, 1.0, 1.0); // Fallback
+
+    fragColor = vec4(objectColor, 1.0);
   }
 }
 </script>
@@ -142,9 +147,11 @@ void main() {
     const fragEditor = document.getElementById("fragEditor");
     vertEditor.value = document.getElementById("vertex-shader").textContent;
     fragEditor.value = document.getElementById("fragment-shader").textContent;
-    
-    let program, posLoc, colorLoc, normalLoc, texCoordLoc, 
-        uMVM, uPM, uMTM, uNormalMatrixLoc, uObjectIndexLoc, uSamplerLoc; 
+
+    const video = document.getElementById("videoTexture");
+
+    let program, posLoc, colorLoc, normalLoc, texCoordLoc,
+        uMVM, uPM, uMTM, uNormalMatrixLoc, uObjectIndexLoc, uSamplerLoc;
 
     function initShaderProgram() {
       program = createProgram(gl, vertEditor.value, fragEditor.value);
@@ -152,127 +159,158 @@ void main() {
       gl.useProgram(program);
       posLoc = gl.getAttribLocation(program, "aPosition");
       colorLoc = gl.getAttribLocation(program, "aColor");
-      normalLoc = gl.getAttribLocation(program, "aNormal"); 
-      texCoordLoc = gl.getAttribLocation(program, "aTexCoord"); 
+      normalLoc = gl.getAttribLocation(program, "aNormal");
+      texCoordLoc = gl.getAttribLocation(program, "aTexCoord");
 
       uMVM = gl.getUniformLocation(program, "uModelViewMatrix");
       uPM  = gl.getUniformLocation(program, "uProjectionMatrix");
       uMTM = gl.getUniformLocation(program, "uModelTransformationMatrix");
-      uNormalMatrixLoc = gl.getUniformLocation(program, "uNormalMatrix"); 
-      uObjectIndexLoc = gl.getUniformLocation(program, "uObjectIndex"); 
-      uSamplerLoc = gl.getUniformLocation(program, "uSampler"); 
+      uNormalMatrixLoc = gl.getUniformLocation(program, "uNormalMatrix");
+      uObjectIndexLoc = gl.getUniformLocation(program, "uObjectIndex");
+      uSamplerLoc = gl.getUniformLocation(program, "uSampler");
     }
     initShaderProgram();
     vertEditor.onkeyup = initShaderProgram;
     fragEditor.onkeyup = initShaderProgram;
 
-    // --- Texture Management Functions ---
+    // --- Texture Management ---
 
-    let textures = {}; 
+    let textures = {};
     let textureReadyCount = 0;
-    const TOTAL_TEXTURES = 2; // Now loading two textures
+    const TOTAL_TEXTURES = 1; // Only manu.jpg is image-loaded now
+
     let imageURLs = {
-        'cylinderTexture': 'images/manu.jpg', // Static texture for base (0) and upper arm (4)
-        'animatedTexture': 'images/mourinho.gif' // Animated texture for lower arm (2)
+      'cylinderTexture': 'images/manu.jpg' // Static texture for base (0) and upper arm (4)
     };
 
     function loadTexture(gl, url, name) {
-        const texture = gl.createTexture();
-        textures[name] = texture;
+      const texture = gl.createTexture();
+      textures[name] = texture;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+
+      // Temporary red pixel
+      const level = 0;
+      const internalFormat = gl.RGBA;
+      const width = 1;
+      const height = 1;
+      const border = 0;
+      const srcFormat = gl.RGBA;
+      const srcType = gl.UNSIGNED_BYTE;
+      const pixel = new Uint8Array([255, 0, 0, 255]);
+      gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, srcFormat, srcType, pixel);
+
+      const image = new Image();
+      image.onload = () => {
         gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
 
-        // Fill texture with a temporary solid color (Red) while image loads
-        const level = 0;
-        const internalFormat = gl.RGBA;
-        const width = 1;
-        const height = 1;
-        const border = 0;
-        const srcFormat = gl.RGBA;
-        const srcType = gl.UNSIGNED_BYTE;
-        const pixel = new Uint8Array([255, 0, 0, 255]); 
-        gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, width, height, border, srcFormat, srcType, pixel);
-
-        const image = new Image();
-        image.onload = () => {
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); 
-            gl.texImage2D(gl.TEXTURE_2D, level, internalFormat, srcFormat, srcType, image);
-
-            // WebGL 1/2 Check for power-of-2 dimensions
-            if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
-                gl.generateMipmap(gl.TEXTURE_2D);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-            } else {
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            }
-            gl.bindTexture(gl.TEXTURE_2D, null); 
-            textureReadyCount++;
-            if (textureReadyCount === TOTAL_TEXTURES) {
-                console.log("All textures loaded.");
-            }
-        };
-        image.onerror = () => {
-            console.error(`Failed to load texture: ${url}`);
-        };
-        image.src = url;
+        if ((image.width & (image.width - 1)) === 0 && (image.height & (image.height - 1)) === 0) {
+          gl.generateMipmap(gl.TEXTURE_2D);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        } else {
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        }
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        textureReadyCount++;
+        if (textureReadyCount === TOTAL_TEXTURES) {
+          console.log("All static textures loaded.");
+        }
+      };
+      image.onerror = () => {
+        console.error(`Failed to load texture: ${url}`);
+      };
+      image.src = url;
     }
-    
-    function isPowerOf2(value) {
-        return (value & (value - 1)) === 0;
-    }
-    
+
     function initializeTextures() {
-        loadTexture(gl, imageURLs.cylinderTexture, 'cylinderTexture');
-        loadTexture(gl, imageURLs.animatedTexture, 'animatedTexture');
+      loadTexture(gl, imageURLs.cylinderTexture, 'cylinderTexture');
     }
-    
+
+    // Video texture setup
+    let videoTexture;
+
+    function initVideoTexture() {
+      videoTexture = gl.createTexture();
+      textures['animatedTexture'] = videoTexture;
+      gl.bindTexture(gl.TEXTURE_2D, videoTexture);
+
+      // Initial 1x1 black pixel
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
+                    1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+                    new Uint8Array([0, 0, 0, 255]));
+
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      gl.bindTexture(gl.TEXTURE_2D, null);
+
+      // Try to start playback (muted autoplay should work)
+      video.play().catch(() => {});
+    }
+
+    function updateVideoTexture() {
+      if (!videoTexture) return;
+      if (video.readyState >= video.HAVE_CURRENT_DATA) {
+        gl.bindTexture(gl.TEXTURE_2D, videoTexture);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
+                      gl.RGBA, gl.UNSIGNED_BYTE, video);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+    }
+
     // --- End Texture Management ---
 
-    function createGlObject(gl, positions, colors, normals, texCoords, indices, baseScale=[1,1,1]) { 
+    function createGlObject(gl, positions, colors, normals, texCoords, indices, baseScale=[1,1,1]) {
       const vbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
       gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-      const cbo = gl.createBuffer(); 
+
+      const cbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, cbo);
       gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+
       const nbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, nbo);
       gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
-      
-      const tbo = gl.createBuffer(); 
+
+      const tbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, tbo);
       gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.STATIC_DRAW);
-      
+
       const ibo = gl.createBuffer();
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-      
-      return { vbo, cbo, nbo, tbo, ibo, indexCount: indices.length, baseScale }; 
+
+      return { vbo, cbo, nbo, tbo, ibo, indexCount: indices.length, baseScale };
     }
 
     let accumulatedRotationMatrix, proj, startTime;
     let mouseDown = false, lastX, lastY;
     let camX = 0, camY = -2, camZ = -20;
-    let sphereData, cylinderData, coneData, rootNode; 
-    
+    let sphereData, cylinderData, coneData, rootNode;
+
     function drawModel(node, parentMTM) {
       if (!node.object || !node.object.vbo) return;
-      
-      // Select Texture based on index
+
+      // Bind texture depending on object index
       if (node.index === 0 || node.index === 4) {
-          // Base (0) and Upper Arm (4) use static texture
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, textures['cylinderTexture']);
-          gl.uniform1i(uSamplerLoc, 0); 
+        // Base & upper arm: static manu.jpg
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, textures['cylinderTexture']);
+        gl.uniform1i(uSamplerLoc, 0);
       } else if (node.index === 2) {
-          // Lower Arm (2) uses animated texture
-          gl.activeTexture(gl.TEXTURE0);
-          gl.bindTexture(gl.TEXTURE_2D, textures['animatedTexture']);
-          gl.uniform1i(uSamplerLoc, 0); 
+        // Lower arm: animated video texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, textures['animatedTexture']);
+        gl.uniform1i(uSamplerLoc, 0);
       }
-      
+
       let LTM = mat4Identity();
       LTM = mat4Scale(LTM, node.object.baseScale);
       if (node.rotation) {
@@ -282,33 +320,34 @@ void main() {
       }
       LTM = mat4Translate(LTM, node.translation || [0,0,0]);
       const MTM = multiplyMat4(parentMTM, LTM);
-      
-      const NTM = mat4InverseTranspose(MTM); 
-      gl.uniformMatrix4fv(uNormalMatrixLoc, false, NTM); 
+
+      const NTM = mat4InverseTranspose(MTM);
+      gl.uniformMatrix4fv(uNormalMatrixLoc, false, NTM);
 
       gl.uniform1i(uObjectIndexLoc, node.index);
       gl.uniformMatrix4fv(uMTM, false, MTM);
+
       const obj = node.object;
-      
+
       gl.bindBuffer(gl.ARRAY_BUFFER, obj.vbo);
       gl.enableVertexAttribArray(posLoc);
       gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 0, 0);
-      
+
       gl.bindBuffer(gl.ARRAY_BUFFER, obj.cbo);
       gl.enableVertexAttribArray(colorLoc);
       gl.vertexAttribPointer(colorLoc, 3, gl.FLOAT, false, 0, 0);
-      
-      gl.bindBuffer(gl.ARRAY_BUFFER, obj.nbo); 
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, obj.nbo);
       gl.enableVertexAttribArray(normalLoc);
       gl.vertexAttribPointer(normalLoc, 3, gl.FLOAT, false, 0, 0);
-      
-      gl.bindBuffer(gl.ARRAY_BUFFER, obj.tbo); 
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, obj.tbo);
       gl.enableVertexAttribArray(texCoordLoc);
       gl.vertexAttribPointer(texCoordLoc, 2, gl.FLOAT, false, 0, 0);
 
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, obj.ibo);
       gl.drawElements(gl.TRIANGLES, obj.indexCount, gl.UNSIGNED_SHORT, 0);
-      
+
       if (node.children) node.children.forEach(child => drawModel(child, MTM));
     }
 
@@ -317,15 +356,18 @@ void main() {
       gl.enable(gl.DEPTH_TEST);
       gl.clearColor(0.1, 0.1, 0.1, 1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-      
-      const viewRotationMatrix = multiplyMat4(mat4Translate(mat4Identity(), [camX, camY, camZ]), accumulatedRotationMatrix);
-      
+
+      // Update video texture every frame
+      updateVideoTexture();
+
+      const viewRotationMatrix =
+        multiplyMat4(mat4Translate(mat4Identity(), [camX, camY, camZ]), accumulatedRotationMatrix);
+
       gl.uniformMatrix4fv(uPM, false, proj);
       gl.uniformMatrix4fv(uMVM, false, viewRotationMatrix);
-      
-      // Draw the main robot arm
-      drawModel(rootNode, mat4Identity()); 
-      
+
+      drawModel(rootNode, mat4Identity());
+
       requestAnimationFrame(render);
     }
 
@@ -333,47 +375,118 @@ void main() {
       accumulatedRotationMatrix = mat4Identity();
       proj = perspective(Math.PI/4, canvas.width/canvas.height, 0.1, 100);
       startTime = performance.now();
-      
-      initializeTextures(); // Load the textures
 
-      const BASE_HEIGHT=1.0, SEG_LENGTH=2.0, SEG_THICKNESS=0.5, JOINT_RADIUS=0.8, FINGER_LENGTH=2.0, FINGER_THICKNESS=0.3;
+      initializeTextures();  // manu.jpg
+      initVideoTexture();    // mourinho.mp4 video texture
+
+      const BASE_HEIGHT=1.0, SEG_LENGTH=2.0, SEG_THICKNESS=0.5,
+            JOINT_RADIUS=0.8, FINGER_LENGTH=2.0, FINGER_THICKNESS=0.3;
+
       sphereData = generateSphereData(20,20,1.0);
       cylinderData = generateCylinderData(24,1.0,1.0);
       coneData = generateConeData(24,1.0,1.0);
 
       const emptyTexCoords = new Float32Array([]);
 
-      const baseObj = createGlObject(gl,cylinderData.positions,cylinderData.colors,cylinderData.normals,cylinderData.texCoords,cylinderData.indices,[4.0,BASE_HEIGHT,4.0]);
-      const shoulderJointObj = createGlObject(gl,sphereData.positions,sphereData.colors,sphereData.normals,emptyTexCoords,sphereData.indices,[JOINT_RADIUS,JOINT_RADIUS,JOINT_RADIUS]); 
-      const lowerArmObj = createGlObject(gl,cylinderData.positions,cylinderData.colors,cylinderData.normals,cylinderData.texCoords,cylinderData.indices,[SEG_THICKNESS,SEG_LENGTH,SEG_THICKNESS]);
-      const elbowJointObj = createGlObject(gl,sphereData.positions,sphereData.colors,sphereData.normals,emptyTexCoords,sphereData.indices,[JOINT_RADIUS*0.8,JOINT_RADIUS*0.8,JOINT_RADIUS*0.8]); 
-      const upperArmObj = createGlObject(gl,cylinderData.positions,cylinderData.colors,cylinderData.normals,cylinderData.texCoords,cylinderData.indices,[SEG_THICKNESS,SEG_LENGTH,SEG_THICKNESS]);
-      const finger1Obj = createGlObject(gl,coneData.positions,coneData.colors,coneData.normals,coneData.texCoords,coneData.indices,[FINGER_THICKNESS,FINGER_LENGTH,FINGER_THICKNESS]);
-      const finger2Obj = createGlObject(gl,coneData.positions,coneData.colors,coneData.normals,coneData.texCoords,coneData.indices,[FINGER_THICKNESS,FINGER_LENGTH,FINGER_THICKNESS]);
+      const baseObj = createGlObject(
+        gl, cylinderData.positions, cylinderData.colors,
+        cylinderData.normals, cylinderData.texCoords,
+        cylinderData.indices, [4.0,BASE_HEIGHT,4.0]
+      );
+      const shoulderJointObj = createGlObject(
+        gl, sphereData.positions, sphereData.colors,
+        sphereData.normals, emptyTexCoords,
+        sphereData.indices, [JOINT_RADIUS,JOINT_RADIUS,JOINT_RADIUS]
+      );
+      const lowerArmObj = createGlObject(
+        gl, cylinderData.positions, cylinderData.colors,
+        cylinderData.normals, cylinderData.texCoords,
+        cylinderData.indices, [SEG_THICKNESS,SEG_LENGTH,SEG_THICKNESS]
+      );
+      const elbowJointObj = createGlObject(
+        gl, sphereData.positions, sphereData.colors,
+        sphereData.normals, emptyTexCoords,
+        sphereData.indices, [JOINT_RADIUS*0.8,JOINT_RADIUS*0.8,JOINT_RADIUS*0.8]
+      );
+      const upperArmObj = createGlObject(
+        gl, cylinderData.positions, cylinderData.colors,
+        cylinderData.normals, cylinderData.texCoords,
+        cylinderData.indices, [SEG_THICKNESS,SEG_LENGTH,SEG_THICKNESS]
+      );
+      const finger1Obj = createGlObject(
+        gl, coneData.positions, coneData.colors,
+        coneData.normals, coneData.texCoords,
+        coneData.indices, [FINGER_THICKNESS,FINGER_LENGTH,FINGER_THICKNESS]
+      );
+      const finger2Obj = createGlObject(
+        gl, coneData.positions, coneData.colors,
+        coneData.normals, coneData.texCoords,
+        coneData.indices, [FINGER_THICKNESS,FINGER_LENGTH,FINGER_THICKNESS]
+      );
 
-      const finger1Node = {object:finger1Obj,index:5,translation:[0,FINGER_LENGTH*0.25,FINGER_THICKNESS/2],rotation:{axis:'Z',angle:0}};
-      const finger2Node = {object:finger2Obj,index:6,translation:[0,FINGER_LENGTH*0.25,-FINGER_THICKNESS/2],rotation:{axis:'Z',angle:0}};
-      const upperArmNode = {object:upperArmObj,index:4,translation:[0,SEG_LENGTH*0.5,0],rotation:{axis:'X',angle:0},children:[finger1Node,finger2Node]};
-      const wristJointNode = {object:elbowJointObj,index:3,translation:[0,SEG_LENGTH*0.5,0],rotation:{axis:'Y',angle:0,jointId:'joint3'},children:[upperArmNode]};
-      const lowerArmNode = {object:lowerArmObj,index:2,translation:[0,SEG_LENGTH*0.5,0],rotation:{axis:'X',angle:0,jointId:'joint2'},children:[wristJointNode]};
-      const shoulderJointNode = {object:shoulderJointObj,index:1,translation:[0,BASE_HEIGHT*0.5,0],rotation:{axis:'Y',angle:0,jointId:'joint1'},children:[lowerArmNode]};
-      rootNode = {object:baseObj,index:0,translation:[0,BASE_HEIGHT*0.5-5.0,0],children:[shoulderJointNode]};
-      
+      const finger1Node = {
+        object:finger1Obj,index:5,
+        translation:[0,FINGER_LENGTH*0.25,FINGER_THICKNESS/2],
+        rotation:{axis:'Z',angle:0}
+      };
+      const finger2Node = {
+        object:finger2Obj,index:6,
+        translation:[0,FINGER_LENGTH*0.25,-FINGER_THICKNESS/2],
+        rotation:{axis:'Z',angle:0}
+      };
+      const upperArmNode = {
+        object:upperArmObj,index:4,
+        translation:[0,SEG_LENGTH*0.5,0],
+        rotation:{axis:'X',angle:0},
+        children:[finger1Node,finger2Node]
+      };
+      const wristJointNode = {
+        object:elbowJointObj,index:3,
+        translation:[0,SEG_LENGTH*0.5,0],
+        rotation:{axis:'Y',angle:0,jointId:'joint3'},
+        children:[upperArmNode]
+      };
+      const lowerArmNode = {
+        object:lowerArmObj,index:2,
+        translation:[0,SEG_LENGTH*0.5,0],
+        rotation:{axis:'X',angle:0,jointId:'joint2'},
+        children:[wristJointNode]
+      };
+      const shoulderJointNode = {
+        object:shoulderJointObj,index:1,
+        translation:[0,BASE_HEIGHT*0.5,0],
+        rotation:{axis:'Y',angle:0,jointId:'joint1'},
+        children:[lowerArmNode]
+      };
+      rootNode = {
+        object:baseObj,index:0,
+        translation:[0,BASE_HEIGHT*0.5-5.0,0],
+        children:[shoulderJointNode]
+      };
+
       document.querySelectorAll('#controls input[type="range"]').forEach(s=>{
         s.addEventListener('input',e=>{
           const a=parseFloat(e.target.value)*Math.PI/180;
           const id=e.target.dataset.jointId;
-          const u=n=>{if(n.rotation&&n.rotation.jointId===id)n.rotation.angle=a;if(n.children)n.children.forEach(u);};
+          const u=n=>{
+            if(n.rotation && n.rotation.jointId===id) n.rotation.angle=a;
+            if(n.children) n.children.forEach(u);
+          };
           u(rootNode);
         });
       });
-      
-      canvas.addEventListener('mousedown',e=>{mouseDown=true;lastX=e.clientX;lastY=e.clientY;});
+
+      canvas.addEventListener('mousedown',e=>{
+        mouseDown=true;lastX=e.clientX;lastY=e.clientY;
+      });
       canvas.addEventListener('mouseup',()=>mouseDown=false);
       canvas.addEventListener('mousemove',e=>{
         if(!mouseDown)return;
         const dx=e.clientX-lastX,dy=e.clientY-lastY;
-        const rot= multiplyMat4(mat4RotateY(mat4RotateX(mat4Identity(),dy*0.01),dx*0.01),accumulatedRotationMatrix);
+        const rot = multiplyMat4(
+          mat4RotateY(mat4RotateX(mat4Identity(),dy*0.01),dx*0.01),
+          accumulatedRotationMatrix
+        );
         accumulatedRotationMatrix=rot;
         lastX=e.clientX;lastY=e.clientY;
       });
